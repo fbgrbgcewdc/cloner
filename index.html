@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube Player</title>
+<style>
+body {
+margin: 0;
+font-family: sans-serif;
+background: #111;
+color: #fff;
+}
+
+.sidebar {
+position: fixed;
+top: 0;
+left: 0;
+width: 220px;
+height: 100%;
+background: #1a1a1a;
+padding: 20px 0;
+box-sizing: border-box;
+}
+.sidebar a {
+display: block;
+padding: 10px 20px;
+color: #fff;
+text-decoration: none;
+margin-bottom: 5px;
+cursor: pointer;
+}
+.sidebar a:hover {
+background: #333;
+}
+
+.top-bar {
+margin-left: 240px;
+padding: 10px 20px;
+display: flex;
+align-items: center;
+gap: 20px;
+}
+.categories {
+display: flex;
+gap: 10px;
+overflow-x: auto;
+flex: 1;
+}
+.categories button {
+padding: 6px 12px;
+border: none;
+border-radius: 16px;
+background: #333;
+color: #fff;
+cursor: pointer;
+}
+.categories button:hover {
+background: #555;
+}
+.search-bar {
+display: flex;
+gap: 5px;
+}
+.search-bar input {
+padding: 6px 10px;
+border: none;
+border-radius: 16px;
+outline: none;
+width: 220px;
+}
+.search-bar button {
+padding: 6px 12px;
+border: none;
+border-radius: 16px;
+background: #cc0000;
+color: #fff;
+cursor: pointer;
+}
+.search-bar button:hover {
+background: #ff0000;
+}
+
+.video-section {
+margin-left: 240px;
+padding: 20px;
+}
+.video-grid {
+display: grid;
+grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+gap: 10px;
+}
+.video-item {
+cursor: pointer;
+}
+.video-item img {
+width: 100%;
+border-radius: 6px;
+}
+.video-item p {
+margin: 5px 0 0 0;
+font-size: 14px;
+}
+
+.shorts-row {
+display: flex;
+overflow-x: auto;
+gap: 10px;
+padding-bottom: 10px;
+}
+.short-item {
+min-width: 160px;
+cursor: pointer;
+}
+.short-item img {
+width: 100%;
+border-radius: 6px;
+}
+.short-item p {
+margin: 5px 0 0 0;
+font-size: 12px;
+}
+
+.overlay {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: #000;
+display: none;
+grid-template-columns: 2fr 1fr;
+gap: 20px;
+padding: 20px;
+box-sizing: border-box;
+z-index: 1000;
+}
+
+.player {
+background: #000;
+padding: 10px;
+border-radius: 6px;
+box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+}
+
+.player iframe {
+width: 100%;
+height: 70vh;
+border: none;
+border-radius: 6px;
+}
+
+.video-info {
+overflow-y: auto;
+background: #1a1a1a;
+padding: 15px;
+border-radius: 6px;
+}
+
+.video-info h3 {
+margin: 0 0 10px 0;
+}
+
+.video-info p {
+margin: 5px 0;
+font-size: 14px;
+color: #bbb;
+}
+
+.close-btn {
+position: absolute;
+top: 15px;
+right: 20px;
+font-size: 28px;
+color: #fff;
+cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+<a onclick="loadFYP()">Home</a>
+<a href="#">Shorts</a>
+<a href="#">Subscriptions</a>
+<hr style="border-color:#333;">
+<a onclick="loadHistory()">History</a>
+<a href="#">Playlists</a>
+<a href="#">Your Videos</a>
+<a href="#">Watch Later</a>
+<a href="#">Liked Videos</a>
+</div>
+
+<div class="top-bar">
+<div class="categories" id="categories">
+<button onclick="loadFYP()">All</button>
+<button>Music</button>
+<button>Gaming</button>
+<button>Live</button>
+<button>Sports</button>
+<button>News</button>
+<button>Movies</button>
+<button>Education</button>
+</div>
+<div class="search-bar">
+<input type="text" id="search-input" placeholder="Search...">
+<button onclick="searchVideos()">Search</button>
+</div>
+</div>
+
+<div class="video-section">
+<h2 id="section-title">For You</h2>
+<div class="video-grid" id="video-list"></div>
+
+<h2>Shorts</h2>
+<div class="shorts-row" id="shorts-list"></div>
+</div>
+
+<!-- Fullscreen overlay player -->
+<div class="overlay" id="overlay">
+<span class="close-btn" onclick="closeOverlay()">×</span>
+<div class="player" id="player"></div>
+<div class="video-info" id="video-info"></div>
+</div>
+
+<script>
+const API_KEY = 'AIzaSyCdNJr3LrTw1ObLmRp0nk5Rn2wr8AdnwI8'; // Replace with your own API key
+let nextPageToken = null;
+let currentMode = "fyp";
+let currentQuery = "";
+let shownVideoIds = new Set();
+
+// Load "For You" section
+async function fetchFYP(loadMore = false) {
+if (!loadMore) {
+nextPageToken = null;
+shownVideoIds.clear();
+}
+
+let url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=US&maxResults=12&key=${API_KEY}`;
+if (loadMore && nextPageToken) url += `&pageToken=${nextPageToken}`;
+
+const res = await fetch(url);
+const data = await res.json();
+
+nextPageToken = data.nextPageToken || null;
+console.log("Next page token:", nextPageToken);
+
+displayVideos(data.items, 'video-list', loadMore);
+currentMode = "fyp";
+document.getElementById("section-title").innerText = "For You";
+}
+
+// Shorts fetch
+async function fetchShorts() {
+const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&maxResults=10&q=fun&key=${API_KEY}`);
+const data = await res.json();
+displayVideos(data.items, 'shorts-list');
+}
+
+// Search function
+async function searchVideos(loadMore = false) {
+const query = loadMore ? currentQuery : document.getElementById('search-input').value;
+if (!query) return;
+
+if (!loadMore) {
+shownVideoIds.clear();
+document.getElementById('section-title').innerText = `Results for "${query}"`;
+document.getElementById('video-list').innerHTML = "";
+nextPageToken = null;
+}
+
+let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=12&q=${encodeURIComponent(query)}&key=${API_KEY}`;
+if (loadMore && nextPageToken) url += `&pageToken=${nextPageToken}`;
+
+const res = await fetch(url);
+const data = await res.json();
+
+nextPageToken = data.nextPageToken || null;
+currentMode = "search";
+currentQuery = query;
+
+displayVideos(data.items, 'video-list', loadMore);
+}
+
+// Display videos and avoid duplicates
+function displayVideos(videos, containerId, append = false) {
+const container = document.getElementById(containerId);
+if (!append) container.innerHTML = "";
+
+videos.forEach(video => {
+const videoId = video.id.videoId || video.id;
+if (shownVideoIds.has(videoId)) return;
+shownVideoIds.add(videoId);
+
+const div = document.createElement('div');
+div.className = containerId === 'shorts-list' ? 'short-item' : 'video-item';
+div.innerHTML = `
+<img src="${video.snippet.thumbnails.medium.url}" alt="${video.snippet.title}">
+<p>${video.snippet.title}</p>
+`;
+div.onclick = () => playVideo(videoId, video.snippet, video.statistics);
+container.appendChild(div);
+});
+}
+
+// Play video
+function playVideo(videoId, snippet, stats) {
+const overlay = document.getElementById('overlay');
+const playerDiv = document.getElementById('player');
+const infoDiv = document.getElementById('video-info');
+
+const uploadDate = snippet.publishedAt
+? new Date(snippet.publishedAt).toLocaleDateString(undefined, {
+year: 'numeric',
+month: 'long',
+day: 'numeric'
+})
+: 'Unknown';
+
+playerDiv.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>`;
+infoDiv.innerHTML = `
+<h3>${snippet.title}</h3>
+<p>Channel: ${snippet.channelTitle}</p>
+<p>${stats ? stats.viewCount : 'N/A'} views • ${stats && stats.likeCount ? stats.likeCount : 'N/A'} likes</p>
+<p>Uploaded on: ${uploadDate}</p>
+<p>${snippet.description}</p>
+`;
+
+
+overlay.style.display = "grid";
+
+saveToHistory({
+id: videoId,
+title: snippet.title,
+channel: snippet.channelTitle,
+thumbnail: snippet.thumbnails.medium.url
+});
+}
+
+// Close player
+function closeOverlay() {
+document.getElementById('overlay').style.display = "none";
+document.getElementById('player').innerHTML = "";
+}
+
+// History
+function saveToHistory(video) {
+let history = JSON.parse(localStorage.getItem("history")) || [];
+history = history.filter(v => v.id !== video.id);
+history.unshift(video);
+if (history.length > 50) history.pop();
+localStorage.setItem("history", JSON.stringify(history));
+}
+
+// Load history page
+function loadHistory() {
+currentMode = "history";
+document.getElementById("section-title").innerText = "History";
+document.getElementById("video-list").innerHTML = "";
+shownVideoIds.clear();
+
+const history = JSON.parse(localStorage.getItem("history")) || [];
+if (history.length === 0) {
+document.getElementById("video-list").innerHTML = "<p>No history yet.</p>";
+return;
+}
+
+history.forEach(video => {
+if (shownVideoIds.has(video.id)) return;
+shownVideoIds.add(video.id);
+
+const div = document.createElement('div');
+div.className = "video-item";
+div.innerHTML = `
+<img src="${video.thumbnail}" alt="${video.title}">
+<p>${video.title}</p>
+`;
+div.onclick = () => playVideo(video.id, {
+title: video.title,
+channelTitle: video.channel,
+description: "",
+thumbnails: { medium: { url: video.thumbnail } }
+}, null);
+document.getElementById("video-list").appendChild(div);
+});
+}
+
+// Infinite scroll
+window.addEventListener("scroll", () => {
+if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 100) {
+if (currentMode === "fyp") {
+fetchFYP(true);
+} else if (currentMode === "search") {
+searchVideos(true);
+}
+}
+});
+
+// Initial load
+function loadFYP() {
+document.getElementById('video-list').innerHTML = "";
+fetchFYP();
+}
+loadFYP();
+fetchShorts();
+</script>
+
+</body>
+</html>
